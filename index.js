@@ -559,14 +559,19 @@ bot.on('text', async (ctx) => {
     }
 
     return showMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню.');
-  } catch (error) {
-    console.error('ERROR:', error);
-    return ctx.reply(
-      '❌ Сталася помилка при обробці або записі в таблицю. Перевірте доступ таблиці та назви листів: "Заявки" і "Показания".',
-      MAIN_MENU
-    );
-  }
-});
+ } catch (error) {
+  console.error('FULL ERROR:', error?.response?.data || error?.message || error);
+
+  return ctx.reply(
+    `❌ Помилка запису: ${
+      error?.response?.data?.error?.message ||
+      error?.message ||
+      'невідома помилка'
+    }`,
+    MAIN_MENU
+  );
+}
+
 
 // =========================
 // LAUNCH
