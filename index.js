@@ -5,6 +5,13 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 bot.use(session());
 
 // =========================
+// CONFIG
+// =========================
+const CHANNEL_URL = 'https://t.me/kptgkp';
+const CONTACT_PHONE_DISPLAY = '056 747 36 07';
+const CONTACT_PHONE_LINK = 'tel:0567473607'; // может зависеть от клиента Telegram
+
+// =========================
 // GOOGLE SHEETS
 // =========================
 const auth = new google.auth.JWT(
@@ -28,25 +35,32 @@ async function appendRow(sheetName, row) {
 }
 
 // =========================
-// КЛАВИАТУРЫ
+// KEYBOARDS
 // =========================
-const MAIN_MENU = Markup.keyboard([
-  ['📊 Передати показники'],
-  ['🧾 Залишити заявку'],
-  ['📢 Канал ТЖКП'],
-  ['📞 Контакт центр']
-]).resize();
+function mainMenuInline() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('📊 Передати показники', 'meters_start'),
+      Markup.button.callback('🧾 Залишити заявку', 'request_start')
+    ],
+    [
+      Markup.button.url('📢 Канал ТЖКП', CHANNEL_URL),
+      Markup.button.url('📞 Контакт центр', CONTACT_PHONE_LINK)
+    ]
+  ]);
+}
 
 const YES_NO = Markup.keyboard([['Так', 'Ні']]).resize();
-
 const CONFIRM_KB = Markup.keyboard([['Вірно', 'Змінити']]).resize();
+const REMOVE_KB = Markup.removeKeyboard();
 
 // =========================
-// ТЕКСТЫ ПО ТЗ
+// TEXTS
 // =========================
 const START_TEXT =
   'Вас вітає віртуальний помічник КП «ТЖКП»! 👋\n\n' +
-  'За моєю допомогою ви можете передати показники приладів обліку, оформити заявку або отримати актуальну інформацію.';
+  'За моєю допомогою ви можете передати показники приладів обліку, оформити заявку або отримати актуальну інформацію.\n\n' +
+  'Оберіть потрібний пункт меню нижче:';
 
 const WATER_INFO_TEXT =
   'Актуальну інформацію щодо аварійних ситуацій, ремонтних робіт, відключень або відновлення послуг, а також руху транспорту ви можете переглянути в офіційному Telegram-каналі КП «ТЖКП»:\n\n' +
@@ -72,11 +86,10 @@ const PAYMENT_TEXT =
   'Якщо у вас виникнуть запитання — із задоволенням допоможу!';
 
 const TARIFF_TEXT =
-  'Актуальні тарифи КП «ТЖКП» ви можете переглянути на офіційному сайті:\n' +
-  'https://tgkp.com.ua/tariff/';
+  'Актуальні тарифи КП «ТЖКП» ви можете переглянути на офіційному сайті:\nhttps://tgkp.com.ua/tariff/';
 
 // =========================
-// ВСПОМОГАТЕЛЬНОЕ
+// HELPERS
 // =========================
 function resetSession(ctx) {
   ctx.session = {
@@ -91,9 +104,46 @@ function ensureSession(ctx) {
   if (!ctx.session.data) ctx.session.data = {};
 }
 
-function showMainMenu(ctx, text = START_TEXT) {
+async function sendMainMenu(ctx, text = START_TEXT) {
   resetSession(ctx);
-  return ctx.reply(text, MAIN_MENU);
+  return ctx.reply(text, mainMenuInline());
+}
+
+function normalizePhone(input) {
+  const raw = String(input || '').trim();
+  const digits = raw.replace(/\D/g, '');
+
+  if (/^380\d{9}$/.test(digits)) return `+${digits}`;
+  if (/^0\d{9}$/.test(digits)) return `+38${digits}`;
+  return null;
+}
+
+function isValidFullName(input) {
+  const v = String(input || '').trim();
+  if (v.length < 4 || v.length > 70) return false;
+  return /^[A-Za-zА-Яа-яІіЇїЄєҐґ'’` -]+$/.test(v);
+}
+
+function isValidAccount(input) {
+  return /^\d{5,20}$/.test(String(input || '').trim());
+}
+
+function isValidAddress(input) {
+  const v = String(input || '').trim();
+  return v.length >= 5 && v.length <= 120;
+}
+
+function isValidMeterNumber(input) {
+  return /^[A-Za-zА-Яа-яІіЇїЄєҐґ0-9/-]{3,30}$/.test(String(input || '').trim());
+}
+
+function isValidMeterValue(input) {
+  return /^\d{1,10}$/.test(String(input || '').trim());
+}
+
+function isValidRequestText(input) {
+  const v = String(input || '').trim();
+  return v.length >= 5 && v.length <= 500;
 }
 
 function formatMetersConfirmation(d) {
@@ -103,8 +153,11 @@ function formatMetersConfirmation(d) {
     `ПІБ: ${d.fullName || '-'}\n` +
     `Рахунок: ${d.account || '-'}\n` +
     `Адреса: ${d.address || '-'}\n` +
-    `Ліч1: ${d.meter1Number || '-'} (${d.meter1Value || '-'})\n` +
-    `Ліч2: ${d.meter2Number || '-'} (${d.meter2Value || '-'})`
+    `Лічильник №1: ${d.meter1Number || '-'}\n` +
+    `Показники №1: ${d.meter1Value || '-'}\n` +
+    `Другий лічильник: ${d.hasSecondMeter || '-'}\n` +
+    `Лічильник №2: ${d.meter2Number || '-'}\n` +
+    `Показники №2: ${d.meter2Value || '-'}`
   );
 }
 
@@ -156,107 +209,107 @@ function isTariffRelated(text) {
   return [
     'тариф',
     'вартість',
-    'ціни',
     'ціна',
-    'вода скільки',
-    'тепло скільки',
+    'ціни',
     'абонплат'
   ].some(k => t.includes(k));
 }
 
 // =========================
-// START / MENU
+// START
 // =========================
-bot.start((ctx) => showMainMenu(ctx));
-
-bot.hears('📢 Канал ТЖКП', (ctx) => {
-  resetSession(ctx);
-  return ctx.reply('https://t.me/kptgkp', MAIN_MENU);
-});
-
-bot.hears('📞 Контакт центр', (ctx) => {
-  resetSession(ctx);
-  return ctx.reply('Контакт центр: 056 747 36 07', MAIN_MENU);
+bot.start(async (ctx) => {
+  await sendMainMenu(ctx);
 });
 
 // =========================
-// ПЕРЕДАТИ ПОКАЗНИКИ
+// CALLBACK BUTTONS
 // =========================
-bot.hears('📊 Передати показники', (ctx) => {
+bot.action('meters_start', async (ctx) => {
   ensureSession(ctx);
   ctx.session.flow = 'meters';
   ctx.session.step = 'phone';
   ctx.session.data = {};
-  return ctx.reply('Введіть номер телефону:', MAIN_MENU);
+  await ctx.answerCbQuery();
+  return ctx.reply(
+    'Введіть номер телефону у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
+    REMOVE_KB
+  );
 });
 
-// =========================
-// ЗАЛИШИТИ ЗАЯВКУ
-// =========================
-bot.hears('🧾 Залишити заявку', (ctx) => {
+bot.action('request_start', async (ctx) => {
   ensureSession(ctx);
   ctx.session.flow = 'request';
   ctx.session.step = 'phone';
   ctx.session.data = {};
-  return ctx.reply('Вкажіть ваш телефон:', MAIN_MENU);
+  await ctx.answerCbQuery();
+  return ctx.reply(
+    'Вкажіть ваш телефон у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
+    REMOVE_KB
+  );
 });
 
 // =========================
-// ОБЩИЙ ОБРАБОТЧИК
+// TEXT HANDLER
 // =========================
 bot.on('text', async (ctx) => {
   ensureSession(ctx);
   const text = (ctx.message.text || '').trim();
 
-  if (text === '/start') {
-    return showMainMenu(ctx);
-  }
-
-  // Не перехватываем кнопки меню тут повторно
-  if (
-    text === '📊 Передати показники' ||
-    text === '🧾 Залишити заявку' ||
-    text === '📢 Канал ТЖКП' ||
-    text === '📞 Контакт центр'
-  ) {
-    return;
-  }
-
-  // ===== FLOW: METERS =====
+  // ===== METERS FLOW =====
   if (ctx.session.flow === 'meters') {
     const d = ctx.session.data;
 
     if (ctx.session.step === 'phone') {
-      d.phone = text;
+      const phone = normalizePhone(text);
+      if (!phone) {
+        return ctx.reply('❌ Невірний номер телефону.\nВведіть український номер у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX');
+      }
+      d.phone = phone;
       ctx.session.step = 'fullName';
       return ctx.reply('Прізвище, імʼя:');
     }
 
     if (ctx.session.step === 'fullName') {
+      if (!isValidFullName(text)) {
+        return ctx.reply('❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.');
+      }
       d.fullName = text;
       ctx.session.step = 'account';
       return ctx.reply('Особистий рахунок:');
     }
 
     if (ctx.session.step === 'account') {
+      if (!isValidAccount(text)) {
+        return ctx.reply('❌ Невірний особистий рахунок.\nДозволені тільки цифри, від 5 до 20 символів.');
+      }
       d.account = text;
       ctx.session.step = 'address';
       return ctx.reply('Адреса (вулиця, будинок, квартира):');
     }
 
     if (ctx.session.step === 'address') {
+      if (!isValidAddress(text)) {
+        return ctx.reply('❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.');
+      }
       d.address = text;
       ctx.session.step = 'meter1Number';
       return ctx.reply('Вкажіть номер лічильника №1:');
     }
 
     if (ctx.session.step === 'meter1Number') {
+      if (!isValidMeterNumber(text)) {
+        return ctx.reply('❌ Невірний номер лічильника.\nМожна вводити букви, цифри, "/" або "-".');
+      }
       d.meter1Number = text;
       ctx.session.step = 'meter1Value';
       return ctx.reply('Введіть поточні показники лічильника №1:');
     }
 
     if (ctx.session.step === 'meter1Value') {
+      if (!isValidMeterValue(text)) {
+        return ctx.reply('❌ Невірні показники.\nВведіть тільки цифри, без букв і знаків.');
+      }
       d.meter1Value = text;
       ctx.session.step = 'hasSecondMeter';
       return ctx.reply('Чи є у вас другий лічильник?', YES_NO);
@@ -266,7 +319,7 @@ bot.on('text', async (ctx) => {
       if (text === 'Так') {
         d.hasSecondMeter = 'Так';
         ctx.session.step = 'meter2Number';
-        return ctx.reply('Вкажіть номер лічильника №2:');
+        return ctx.reply('Вкажіть номер лічильника №2:', REMOVE_KB);
       }
 
       if (text === 'Ні') {
@@ -281,12 +334,18 @@ bot.on('text', async (ctx) => {
     }
 
     if (ctx.session.step === 'meter2Number') {
+      if (!isValidMeterNumber(text)) {
+        return ctx.reply('❌ Невірний номер лічильника №2.\nМожна вводити букви, цифри, "/" або "-".');
+      }
       d.meter2Number = text;
       ctx.session.step = 'meter2Value';
       return ctx.reply('Введіть поточні показники лічильника №2:');
     }
 
     if (ctx.session.step === 'meter2Value') {
+      if (!isValidMeterValue(text)) {
+        return ctx.reply('❌ Невірні показники №2.\nВведіть тільки цифри, без букв і знаків.');
+      }
       d.meter2Value = text;
       ctx.session.step = 'confirm';
       return ctx.reply(formatMetersConfirmation(d), CONFIRM_KB);
@@ -297,7 +356,10 @@ bot.on('text', async (ctx) => {
         ctx.session.flow = 'meters';
         ctx.session.step = 'phone';
         ctx.session.data = {};
-        return ctx.reply('Добре, введіть номер телефону заново:', MAIN_MENU);
+        return ctx.reply(
+          'Добре, почнемо заново.\nВведіть номер телефону у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
+          REMOVE_KB
+        );
       }
 
       if (text === 'Вірно') {
@@ -311,13 +373,13 @@ bot.on('text', async (ctx) => {
           d.meter1Value || '',
           d.hasSecondMeter || '',
           d.meter2Number || '',
-          d.meter2Value || ''
+          d.meter2Value || '',
+          String(ctx.from?.id || '')
         ]);
 
-        resetSession(ctx);
-        await ctx.reply(
-          'Дякуємо! Показники приборів обліку водопостачання успішно відправлено до КП «ТЖКП».',
-          MAIN_MENU
+        await sendMainMenu(
+          ctx,
+          'Дякуємо! Показники приборів обліку водопостачання успішно відправлено до КП «ТЖКП».'
         );
         return;
       }
@@ -328,29 +390,43 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // ===== FLOW: REQUEST =====
+  // ===== REQUEST FLOW =====
   if (ctx.session.flow === 'request') {
     const d = ctx.session.data;
 
     if (ctx.session.step === 'phone') {
-      d.phone = text;
+      const phone = normalizePhone(text);
+      if (!phone) {
+        return ctx.reply('❌ Невірний номер телефону.\nВведіть український номер у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX');
+      }
+      d.phone = phone;
       ctx.session.step = 'fullName';
       return ctx.reply('Прізвище, імʼя:');
     }
 
     if (ctx.session.step === 'fullName') {
+      if (!isValidFullName(text)) {
+        return ctx.reply('❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.');
+      }
       d.fullName = text;
       ctx.session.step = 'address';
       return ctx.reply('Адреса (вулиця, будинок, квартира):');
     }
 
     if (ctx.session.step === 'address') {
+      if (!isValidAddress(text)) {
+        return ctx.reply('❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.');
+      }
       d.address = text;
       ctx.session.step = 'requestText';
       return ctx.reply('Опишіть ваше звернення:');
     }
 
     if (ctx.session.step === 'requestText') {
+      if (!isValidRequestText(text)) {
+        return ctx.reply('❌ Звернення введено некоректно.\nОпишіть проблему нормально, від 5 до 500 символів.');
+      }
+
       d.requestText = text;
 
       await appendRow('zayavky', [
@@ -358,39 +434,38 @@ bot.on('text', async (ctx) => {
         d.phone || '',
         d.fullName || '',
         d.address || '',
-        d.requestText || ''
+        d.requestText || '',
+        String(ctx.from?.id || '')
       ]);
 
-      resetSession(ctx);
-      await ctx.reply('Дякуємо! Вашу заявку успішно відправлено.', MAIN_MENU);
+      await sendMainMenu(
+        ctx,
+        'Дякуємо! Вашу заявку успішно відправлено.'
+      );
       return;
     }
 
     return;
   }
 
-  // ===== АВТО-ОТВЕТЫ ПО ТЗ =====
+  // ===== AUTO-ANSWERS ONLY OUTSIDE FORMS =====
   if (isElectricityRelated(text)) {
-    return ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
+    return sendMainMenu(ctx, ELECTRICITY_TEXT);
   }
 
   if (isPaymentRelated(text)) {
-    return ctx.reply(PAYMENT_TEXT, MAIN_MENU);
+    return sendMainMenu(ctx, PAYMENT_TEXT);
   }
 
   if (isTariffRelated(text)) {
-    return ctx.reply(TARIFF_TEXT, MAIN_MENU);
+    return sendMainMenu(ctx, TARIFF_TEXT);
   }
 
   if (isWaterRelated(text)) {
-    return ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
+    return sendMainMenu(ctx, WATER_INFO_TEXT);
   }
 
-  // ===== ИНАЧЕ =====
-  return ctx.reply(
-    'Оберіть, будь ласка, потрібний пункт меню.',
-    MAIN_MENU
-  );
+  return sendMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню.');
 });
 
 // =========================
@@ -399,6 +474,5 @@ bot.on('text', async (ctx) => {
 bot.launch();
 console.log('Bot started');
 
-// Корректное завершение
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
