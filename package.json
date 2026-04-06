@@ -1,0 +1,12 @@
+{
+  "name": "tgkp-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "googleapis": "^133.0.0"
+  }
+}
