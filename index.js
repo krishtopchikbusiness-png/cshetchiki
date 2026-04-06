@@ -10,8 +10,8 @@ bot.use(session());
 const CHANNEL_URL = 'https://t.me/kptgkp';
 const CONTACT_PHONE = '056 747 36 07';
 
-const MIN_MESSAGE_INTERVAL_MS = 1200;      // антифлуд между сообщениями
-const MIN_SUBMIT_INTERVAL_MS = 60000;      // не чаще 1 отправки формы в минуту
+const MIN_MESSAGE_INTERVAL_MS = 1200;
+const MIN_SUBMIT_INTERVAL_MS = 60000;
 const MAX_TEXT_LEN = 500;
 
 // =========================
@@ -34,6 +34,20 @@ async function appendRow(sheetName, values) {
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [values] }
   });
+}
+
+// =========================
+// DATE / TIME
+// =========================
+function getDateTimeParts() {
+  const now = new Date();
+  const date = now.toLocaleDateString('uk-UA');
+  const time = now.toLocaleTimeString('uk-UA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+  return { date, time };
 }
 
 // =========================
@@ -81,7 +95,7 @@ const TARIFF_TEXT =
   'Актуальні тарифи КП «ТЖКП» ви можете переглянути на офіційному сайті:\nhttps://tgkp.com.ua/tariff/';
 
 // =========================
-// SESSION HELPERS
+// SESSION
 // =========================
 function resetSession(ctx) {
   ctx.session = {
@@ -191,60 +205,134 @@ function canSubmitForm(ctx) {
 // =========================
 // INTENTS RU + UA
 // =========================
-function includesAny(text, list) {
-  const t = text.toLowerCase();
-  return list.some(x => t.includes(x));
+function normalizeIntentText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/ґ/g, 'г')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function includesAny(text, phrases) {
+  const t = normalizeIntentText(text);
+  return phrases.some(p => t.includes(normalizeIntentText(p)));
 }
 
 function isWaterRelated(text) {
   return includesAny(text, [
-    // UA
-    'авар', 'ремонт', 'відсутність водопостачання', 'немає води', 'відсутність води',
-    'відсутність теплопостачання', 'немає тепла',
-    'відновлення водопостачання', 'відновлення теплопостачання',
-    'обмеження водопостачання', 'графік руху маршрутного автобуса',
-    'відсутність автобуса', 'маршрут', 'автобус',
-    // RU
-    'авария', 'ремонтные работы', 'нет воды', 'отсутствие воды',
-    'нет отопления', 'отсутствие отопления',
-    'восстановление водоснабжения', 'восстановление отопления',
-    'ограничение водоснабжения', 'маршрутный автобус', 'нет автобуса'
+    'аварія',
+    'аварійні роботи',
+    'ремонт',
+    'ремонтні роботи',
+    'немає води',
+    'відсутність води',
+    'відсутність водопостачання',
+    'немає тепла',
+    'відсутність теплопостачання',
+    'відновлення водопостачання',
+    'відновлення теплопостачання',
+    'обмеження водопостачання',
+    'графік руху маршрутного автобуса',
+    'відсутність автобуса',
+    'автобус',
+    'маршрут',
+    'вода',
+    'тепло',
+    'коли дадуть воду',
+    'коли буде вода',
+    'чому немає води',
+
+    'авария',
+    'аварийные работы',
+    'ремонтные работы',
+    'нет воды',
+    'отсутствие воды',
+    'отсутствие водоснабжения',
+    'нет отопления',
+    'отсутствие отопления',
+    'восстановление водоснабжения',
+    'восстановление отопления',
+    'ограничение водоснабжения',
+    'маршрутный автобус',
+    'нет автобуса',
+    'вода',
+    'отопление',
+    'когда дадут воду',
+    'почему нет воды'
   ]);
 }
 
 function isElectricityRelated(text) {
   return includesAny(text, [
-    // UA
-    'немає світла', 'відключили світло', 'чому немає електрики',
-    'коли дадуть світло', 'проблеми з електропостачанням', 'електроенергі',
-    // RU
-    'нет света', 'отключили свет', 'почему нет электричества',
-    'когда дадут свет', 'проблемы с электроснабжением', 'электриче'
+    'немає світла',
+    'відключили світло',
+    'чому немає електрики',
+    'коли дадуть світло',
+    'проблеми з електропостачанням',
+    'електроенергія',
+    'електрика',
+    'світло',
+
+    'нет света',
+    'отключили свет',
+    'почему нет электричества',
+    'когда дадут свет',
+    'проблемы с электроснабжением',
+    'электричество',
+    'свет'
   ]);
 }
 
 function isPaymentRelated(text) {
   return includesAny(text, [
-    // UA
-    'оплат', 'заплатити', 'платіж', 'де оплатити', 'як оплатити', 'як внести оплату',
-    // RU
-    'оплата', 'оплатить', 'заплатить', 'платеж', 'где оплатить', 'как оплатить',
-    // EN
-    'pay', 'payment', 'invoice'
+    'оплатити',
+    'оплата',
+    'заплатити',
+    'платіж',
+    'де оплатити',
+    'як оплатити',
+    'як внести оплату',
+
+    'оплатить',
+    'оплата',
+    'заплатить',
+    'платеж',
+    'где оплатить',
+    'как оплатить',
+    'как внести оплату',
+
+    'pay',
+    'payment',
+    'invoice'
   ]);
 }
 
 function isTariffRelated(text) {
   return includesAny(text, [
-    // UA
-    'тариф', 'вартість послуг', 'ціни на воду', 'ціни на тепло', 'вивіз сміття', 'абонплата',
-    // RU
-    'тариф', 'стоимость услуг', 'цены на воду', 'цены на тепло', 'вывоз мусора', 'абонплата'
+    'тариф',
+    'тарифи',
+    'вартість послуг',
+    'ціни на воду',
+    'ціни на тепло',
+    'вивіз сміття',
+    'абонплата',
+    'скільки коштує',
+
+    'тариф',
+    'тарифы',
+    'стоимость услуг',
+    'цены на воду',
+    'цены на тепло',
+    'вывоз мусора',
+    'абонплата',
+    'сколько стоит'
   ]);
 }
 
 // =========================
-// START / MENU BUTTONS
+// START / MENU
 // =========================
 bot.start(async (ctx) => {
   await showMainMenu(ctx);
@@ -281,7 +369,7 @@ bot.hears('🧾 Залишити заявку', async (ctx) => {
 });
 
 // =========================
-// MAIN TEXT HANDLER
+// MAIN HANDLER
 // =========================
 bot.on('text', async (ctx) => {
   ensureSession(ctx);
@@ -291,7 +379,6 @@ bot.on('text', async (ctx) => {
 
     const text = (ctx.message.text || '').trim();
 
-    // меню-кнопки уже обработаны hears
     if (
       text === '📊 Передати показники' ||
       text === '🧾 Залишити заявку' ||
@@ -305,7 +392,7 @@ bot.on('text', async (ctx) => {
       return ctx.reply('❌ Некоректне повідомлення. Введіть нормальні дані.', MAIN_MENU);
     }
 
-    // ===== ФОРМА ПОКАЗНИКІВ =====
+    // ===== METERS FLOW =====
     if (ctx.session.flow === 'meters') {
       const d = ctx.session.data;
 
@@ -440,8 +527,11 @@ bot.on('text', async (ctx) => {
             return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', MAIN_MENU);
           }
 
+          const { date, time } = getDateTimeParts();
+
           await appendRow('Показания', [
-            new Date().toLocaleString('uk-UA'),
+            date,
+            time,
             d.phone || '',
             d.fullName || '',
             d.account || '',
@@ -450,9 +540,7 @@ bot.on('text', async (ctx) => {
             d.meter1Value || '',
             d.hasSecondMeter || '',
             d.meter2Number || '',
-            d.meter2Value || '',
-            String(ctx.from?.id || ''),
-            ctx.from?.username || ''
+            d.meter2Value || ''
           ]);
 
           return showMainMenu(
@@ -467,7 +555,7 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    // ===== ФОРМА ЗАЯВКИ =====
+    // ===== REQUEST FLOW =====
     if (ctx.session.flow === 'request') {
       const d = ctx.session.data;
 
@@ -522,14 +610,15 @@ bot.on('text', async (ctx) => {
           return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', MAIN_MENU);
         }
 
+        const { date, time } = getDateTimeParts();
+
         await appendRow('Заявки', [
-          new Date().toLocaleString('uk-UA'),
+          date,
+          time,
           d.phone || '',
           d.fullName || '',
           d.address || '',
-          d.requestText || '',
-          String(ctx.from?.id || ''),
-          ctx.from?.username || ''
+          d.requestText || ''
         ]);
 
         return showMainMenu(
@@ -541,7 +630,7 @@ bot.on('text', async (ctx) => {
       return;
     }
 
-    // ===== АВТООТВЕТЫ ТОЛЬКО ВНЕ ФОРМ =====
+    // ===== TRIGGERS ONLY OUTSIDE FORMS =====
     if (isElectricityRelated(text)) {
       return showMainMenu(ctx, ELECTRICITY_TEXT);
     }
@@ -559,7 +648,7 @@ bot.on('text', async (ctx) => {
     }
 
     return showMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню.');
- } catch (error) {
+  } catch (error) {
     console.error('FULL ERROR:', error?.response?.data || error?.message || error);
 
     return ctx.reply(
@@ -573,6 +662,9 @@ bot.on('text', async (ctx) => {
   }
 });
 
+// =========================
+// LAUNCH
+// =========================
 bot.launch();
 console.log('Бот запущен');
 
