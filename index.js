@@ -560,22 +560,19 @@ bot.on('text', async (ctx) => {
 
     return showMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню.');
  } catch (error) {
-  console.error('FULL ERROR:', error?.response?.data || error?.message || error);
+    console.error('FULL ERROR:', error?.response?.data || error?.message || error);
 
-  return ctx.reply(
-    `❌ Помилка запису: ${
-      error?.response?.data?.error?.message ||
-      error?.message ||
-      'невідома помилка'
-    }`,
-    MAIN_MENU
-  );
-}
+    return ctx.reply(
+      `❌ Помилка запису: ${
+        error?.response?.data?.error?.message ||
+        error?.message ||
+        'невідома помилка'
+      }`,
+      MAIN_MENU
+    );
+  }
+});
 
-
-// =========================
-// LAUNCH
-// =========================
 bot.launch();
 console.log('Бот запущен');
 
