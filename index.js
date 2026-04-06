@@ -8,54 +8,44 @@ bot.use(session());
 // CONFIG
 // =========================
 const CHANNEL_URL = 'https://t.me/kptgkp';
-const CONTACT_PHONE_DISPLAY = '056 747 36 07';
+const CONTACT_PHONE = '056 747 36 07';
 
 const MIN_MESSAGE_INTERVAL_MS = 1200;      // антифлуд между сообщениями
-const MIN_FORM_SUBMIT_INTERVAL_MS = 60000; // антиспам между отправками формы (60 сек)
+const MIN_SUBMIT_INTERVAL_MS = 60000;      // не чаще 1 отправки формы в минуту
 const MAX_TEXT_LEN = 500;
 
 // =========================
 // GOOGLE SHEETS
 // =========================
-const auth = new google.auth.JWT(
-  process.env.GOOGLE_CLIENT_EMAIL,
-  null,
-  process.env.GOOGLE_PRIVATE_KEY,
-  ['https://www.googleapis.com/auth/spreadsheets']
-);
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+  },
+  scopes: ['https://www.googleapis.com/auth/spreadsheets']
+});
 
 const sheets = google.sheets({ version: 'v4', auth });
 
-async function appendRow(sheetName, row) {
+async function appendRow(sheetName, values) {
   await sheets.spreadsheets.values.append({
     spreadsheetId: process.env.GOOGLE_SHEET_ID,
     range: `${sheetName}!A1`,
     valueInputOption: 'USER_ENTERED',
-    requestBody: {
-      values: [row]
-    }
+    requestBody: { values: [values] }
   });
 }
 
 // =========================
 // KEYBOARDS
 // =========================
-function mainMenuInline() {
-  return Markup.inlineKeyboard([
-    [
-      Markup.button.callback('📊 Передати показники', 'meters_start'),
-      Markup.button.callback('🧾 Залишити заявку', 'request_start')
-    ],
-    [
-      Markup.button.url('📢 Канал ТЖКП', CHANNEL_URL),
-      Markup.button.callback('📞 Контакт центр', 'contact_center')
-    ]
-  ]);
-}
+const MAIN_MENU = Markup.keyboard([
+  ['📊 Передати показники', '🧾 Залишити заявку'],
+  ['📢 Канал ТЖКП', '📞 Контакт центр']
+]).resize().persistent();
 
-const YES_NO = Markup.keyboard([['Так', 'Ні']]).resize();
-const CONFIRM_KB = Markup.keyboard([['Вірно', 'Змінити']]).resize();
-const REMOVE_KB = Markup.removeKeyboard();
+const YES_NO = Markup.keyboard([['Так', 'Ні']]).resize().persistent();
+const CONFIRM_KB = Markup.keyboard([['Вірно', 'Змінити']]).resize().persistent();
 
 // =========================
 // TEXTS
@@ -110,9 +100,9 @@ function ensureSession(ctx) {
   if (!ctx.session.lastSubmitAt) ctx.session.lastSubmitAt = 0;
 }
 
-async function sendMainMenu(ctx, text = START_TEXT) {
+async function showMainMenu(ctx, text = START_TEXT) {
   resetSession(ctx);
-  return ctx.reply(text, mainMenuInline());
+  return ctx.reply(text, MAIN_MENU);
 }
 
 // =========================
@@ -154,7 +144,8 @@ function isValidMeterValue(input) {
 function isValidRequestText(input) {
   const v = String(input || '').trim();
   if (v.length < 5 || v.length > 500) return false;
-  return !/^(.)\1{4,}$/.test(v); // aaaaa / 11111
+  if (/^(.)\1{4,}$/.test(v)) return false;
+  return true;
 }
 
 function isGarbageText(input) {
@@ -162,15 +153,15 @@ function isGarbageText(input) {
   if (!v) return true;
   if (v.length > MAX_TEXT_LEN) return true;
   if (/^(.)\1{5,}$/.test(v)) return true;
-  if (/^[!@#$%^&*()_+=\-=[\]{};':"\\|,.<>/?`~]+$/.test(v)) return true;
+  if (/^[!@#$%^&*()_+=\-[\]{};':"\\|,.<>/?`~]+$/.test(v)) return true;
   return false;
 }
 
-function formatMetersConfirmation(d) {
+function formatMetersConfirm(d) {
   return (
-    'Перевірте дані:\n\n' +
+    'Перевірте введені дані:\n\n' +
     `Телефон: ${d.phone || '-'}\n` +
-    `ПІБ: ${d.fullName || '-'}\n` +
+    `Прізвище, імʼя: ${d.fullName || '-'}\n` +
     `Особистий рахунок: ${d.account || '-'}\n` +
     `Адреса: ${d.address || '-'}\n` +
     `Лічильник №1: ${d.meter1Number || '-'}\n` +
@@ -184,9 +175,7 @@ function formatMetersConfirmation(d) {
 function canProcessMessage(ctx) {
   ensureSession(ctx);
   const now = Date.now();
-  if (now - ctx.session.lastMessageAt < MIN_MESSAGE_INTERVAL_MS) {
-    return false;
-  }
+  if (now - ctx.session.lastMessageAt < MIN_MESSAGE_INTERVAL_MS) return false;
   ctx.session.lastMessageAt = now;
   return true;
 }
@@ -194,9 +183,7 @@ function canProcessMessage(ctx) {
 function canSubmitForm(ctx) {
   ensureSession(ctx);
   const now = Date.now();
-  if (now - ctx.session.lastSubmitAt < MIN_FORM_SUBMIT_INTERVAL_MS) {
-    return false;
-  }
+  if (now - ctx.session.lastSubmitAt < MIN_SUBMIT_INTERVAL_MS) return false;
   ctx.session.lastSubmitAt = now;
   return true;
 }
@@ -204,23 +191,24 @@ function canSubmitForm(ctx) {
 // =========================
 // INTENTS RU + UA
 // =========================
-function includesAny(text, arr) {
+function includesAny(text, list) {
   const t = text.toLowerCase();
-  return arr.some(k => t.includes(k));
+  return list.some(x => t.includes(x));
 }
 
 function isWaterRelated(text) {
   return includesAny(text, [
     // UA
-    'авар', 'ремонт', 'водопостач', 'немає води', 'відсутність води',
-    'відсутність водопостачання', 'немає тепла', 'відсутність теплопостачання',
+    'авар', 'ремонт', 'відсутність водопостачання', 'немає води', 'відсутність води',
+    'відсутність теплопостачання', 'немає тепла',
     'відновлення водопостачання', 'відновлення теплопостачання',
-    'обмеження водопостачання', 'маршрут', 'автобус', 'відсутність автобуса',
+    'обмеження водопостачання', 'графік руху маршрутного автобуса',
+    'відсутність автобуса', 'маршрут', 'автобус',
     // RU
     'авария', 'ремонтные работы', 'нет воды', 'отсутствие воды',
-    'нет отопления', 'отсутствие отопления', 'восстановление водоснабжения',
-    'восстановление отопления', 'ограничение водоснабжения',
-    'маршрутный автобус', 'нет автобуса'
+    'нет отопления', 'отсутствие отопления',
+    'восстановление водоснабжения', 'восстановление отопления',
+    'ограничение водоснабжения', 'маршрутный автобус', 'нет автобуса'
   ]);
 }
 
@@ -228,7 +216,7 @@ function isElectricityRelated(text) {
   return includesAny(text, [
     // UA
     'немає світла', 'відключили світло', 'чому немає електрики',
-    'коли дадуть світло', 'електропостач', 'електроенер',
+    'коли дадуть світло', 'проблеми з електропостачанням', 'електроенергі',
     // RU
     'нет света', 'отключили свет', 'почему нет электричества',
     'когда дадут свет', 'проблемы с электроснабжением', 'электриче'
@@ -249,316 +237,335 @@ function isPaymentRelated(text) {
 function isTariffRelated(text) {
   return includesAny(text, [
     // UA
-    'тариф', 'вартість послуг', 'ціни на воду', 'ціни на тепло', 'абонплата',
-    'вивіз сміття',
+    'тариф', 'вартість послуг', 'ціни на воду', 'ціни на тепло', 'вивіз сміття', 'абонплата',
     // RU
-    'тариф', 'стоимость услуг', 'цены на воду', 'цены на тепло', 'абонплата',
-    'вывоз мусора'
+    'тариф', 'стоимость услуг', 'цены на воду', 'цены на тепло', 'вывоз мусора', 'абонплата'
   ]);
 }
 
 // =========================
-// START / MENU
+// START / MENU BUTTONS
 // =========================
 bot.start(async (ctx) => {
-  await sendMainMenu(ctx);
+  await showMainMenu(ctx);
 });
 
-bot.action('contact_center', async (ctx) => {
-  await ctx.answerCbQuery();
-  return ctx.reply(`Контакт центр: ${CONTACT_PHONE_DISPLAY}`);
+bot.hears('📢 Канал ТЖКП', async (ctx) => {
+  return ctx.reply(CHANNEL_URL, MAIN_MENU);
 });
 
-// =========================
-// FLOW STARTS
-// =========================
-bot.action('meters_start', async (ctx) => {
+bot.hears('📞 Контакт центр', async (ctx) => {
+  return ctx.reply(`Контакт центр: ${CONTACT_PHONE}`, MAIN_MENU);
+});
+
+bot.hears('📊 Передати показники', async (ctx) => {
   ensureSession(ctx);
   ctx.session.flow = 'meters';
   ctx.session.step = 'phone';
   ctx.session.data = {};
-  await ctx.answerCbQuery();
   return ctx.reply(
     'Введіть номер телефону у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
-    REMOVE_KB
+    MAIN_MENU
   );
 });
 
-bot.action('request_start', async (ctx) => {
+bot.hears('🧾 Залишити заявку', async (ctx) => {
   ensureSession(ctx);
   ctx.session.flow = 'request';
   ctx.session.step = 'phone';
   ctx.session.data = {};
-  await ctx.answerCbQuery();
   return ctx.reply(
     'Вкажіть ваш телефон у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
-    REMOVE_KB
+    MAIN_MENU
   );
 });
 
 // =========================
-// TEXT HANDLER
+// MAIN TEXT HANDLER
 // =========================
 bot.on('text', async (ctx) => {
   ensureSession(ctx);
 
-  if (!canProcessMessage(ctx)) {
-    return;
-  }
+  try {
+    if (!canProcessMessage(ctx)) return;
 
-  const text = (ctx.message.text || '').trim();
-  if (isGarbageText(text)) {
-    return ctx.reply('❌ Некоректне повідомлення. Введіть нормальні дані.');
-  }
+    const text = (ctx.message.text || '').trim();
 
-  // =====================
-  // FLOW: METERS
-  // =====================
-  if (ctx.session.flow === 'meters') {
-    const d = ctx.session.data;
-
-    if (ctx.session.step === 'phone') {
-      const phone = normalizePhone(text);
-      if (!phone) {
-        return ctx.reply(
-          '❌ Невірний номер телефону.\nВведіть український номер у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX'
-        );
-      }
-      d.phone = phone;
-      ctx.session.step = 'fullName';
-      return ctx.reply('Прізвище, імʼя:');
+    // меню-кнопки уже обработаны hears
+    if (
+      text === '📊 Передати показники' ||
+      text === '🧾 Залишити заявку' ||
+      text === '📢 Канал ТЖКП' ||
+      text === '📞 Контакт центр'
+    ) {
+      return;
     }
 
-    if (ctx.session.step === 'fullName') {
-      if (!isValidFullName(text)) {
-        return ctx.reply(
-          '❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.'
-        );
-      }
-      d.fullName = text;
-      ctx.session.step = 'account';
-      return ctx.reply('Особистий рахунок:');
+    if (isGarbageText(text)) {
+      return ctx.reply('❌ Некоректне повідомлення. Введіть нормальні дані.', MAIN_MENU);
     }
 
-    if (ctx.session.step === 'account') {
-      if (!isValidAccount(text)) {
-        return ctx.reply(
-          '❌ Невірний особистий рахунок.\nДозволені тільки цифри, від 5 до 20 символів.'
-        );
-      }
-      d.account = text;
-      ctx.session.step = 'address';
-      return ctx.reply('Адреса (вулиця, будинок, квартира):');
-    }
+    // ===== ФОРМА ПОКАЗНИКІВ =====
+    if (ctx.session.flow === 'meters') {
+      const d = ctx.session.data;
 
-    if (ctx.session.step === 'address') {
-      if (!isValidAddress(text)) {
-        return ctx.reply(
-          '❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.'
-        );
-      }
-      d.address = text;
-      ctx.session.step = 'meter1Number';
-      return ctx.reply('Вкажіть номер лічильника №1:');
-    }
-
-    if (ctx.session.step === 'meter1Number') {
-      if (!isValidMeterNumber(text)) {
-        return ctx.reply(
-          '❌ Невірний номер лічильника.\nМожна вводити букви, цифри, "/" або "-".'
-        );
-      }
-      d.meter1Number = text;
-      ctx.session.step = 'meter1Value';
-      return ctx.reply('Введіть поточні показники лічильника №1:');
-    }
-
-    if (ctx.session.step === 'meter1Value') {
-      if (!isValidMeterValue(text)) {
-        return ctx.reply(
-          '❌ Невірні показники.\nВведіть тільки цифри, без букв і знаків.'
-        );
-      }
-      d.meter1Value = text;
-      ctx.session.step = 'hasSecondMeter';
-      return ctx.reply('Чи є у вас другий лічильник?', YES_NO);
-    }
-
-    if (ctx.session.step === 'hasSecondMeter') {
-      if (text === 'Так') {
-        d.hasSecondMeter = 'Так';
-        ctx.session.step = 'meter2Number';
-        return ctx.reply('Вкажіть номер лічильника №2:', REMOVE_KB);
+      if (ctx.session.step === 'phone') {
+        const phone = normalizePhone(text);
+        if (!phone) {
+          return ctx.reply(
+            '❌ Невірний номер телефону.\nВведіть український номер у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
+            MAIN_MENU
+          );
+        }
+        d.phone = phone;
+        ctx.session.step = 'fullName';
+        return ctx.reply('Прізвище, імʼя:', MAIN_MENU);
       }
 
-      if (text === 'Ні') {
-        d.hasSecondMeter = 'Ні';
-        d.meter2Number = '';
-        d.meter2Value = '';
-        ctx.session.step = 'confirm';
-        return ctx.reply(formatMetersConfirmation(d), CONFIRM_KB);
+      if (ctx.session.step === 'fullName') {
+        if (!isValidFullName(text)) {
+          return ctx.reply(
+            '❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.',
+            MAIN_MENU
+          );
+        }
+        d.fullName = text;
+        ctx.session.step = 'account';
+        return ctx.reply('Особистий рахунок:', MAIN_MENU);
       }
 
-      return ctx.reply('Будь ласка, оберіть: Так або Ні.', YES_NO);
-    }
-
-    if (ctx.session.step === 'meter2Number') {
-      if (!isValidMeterNumber(text)) {
-        return ctx.reply(
-          '❌ Невірний номер лічильника №2.\nМожна вводити букви, цифри, "/" або "-".'
-        );
-      }
-      d.meter2Number = text;
-      ctx.session.step = 'meter2Value';
-      return ctx.reply('Введіть поточні показники лічильника №2:');
-    }
-
-    if (ctx.session.step === 'meter2Value') {
-      if (!isValidMeterValue(text)) {
-        return ctx.reply(
-          '❌ Невірні показники №2.\nВведіть тільки цифри, без букв і знаків.'
-        );
-      }
-      d.meter2Value = text;
-      ctx.session.step = 'confirm';
-      return ctx.reply(formatMetersConfirmation(d), CONFIRM_KB);
-    }
-
-    if (ctx.session.step === 'confirm') {
-      if (text === 'Змінити') {
-        ctx.session.flow = 'meters';
-        ctx.session.step = 'phone';
-        ctx.session.data = {};
-        return ctx.reply(
-          'Добре, почнемо заново.\nВведіть номер телефону у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
-          REMOVE_KB
-        );
+      if (ctx.session.step === 'account') {
+        if (!isValidAccount(text)) {
+          return ctx.reply(
+            '❌ Невірний особистий рахунок.\nДозволені тільки цифри, від 5 до 20 символів.',
+            MAIN_MENU
+          );
+        }
+        d.account = text;
+        ctx.session.step = 'address';
+        return ctx.reply('Адреса (вулиця, будинок, квартира):', MAIN_MENU);
       }
 
-      if (text === 'Вірно') {
-        if (!canSubmitForm(ctx)) {
-          return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.');
+      if (ctx.session.step === 'address') {
+        if (!isValidAddress(text)) {
+          return ctx.reply(
+            '❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.',
+            MAIN_MENU
+          );
+        }
+        d.address = text;
+        ctx.session.step = 'meter1Number';
+        return ctx.reply('Вкажіть номер лічильника №1:', MAIN_MENU);
+      }
+
+      if (ctx.session.step === 'meter1Number') {
+        if (!isValidMeterNumber(text)) {
+          return ctx.reply(
+            '❌ Невірний номер лічильника.\nМожна вводити букви, цифри, "/" або "-".',
+            MAIN_MENU
+          );
+        }
+        d.meter1Number = text;
+        ctx.session.step = 'meter1Value';
+        return ctx.reply('Введіть поточні показники лічильника №1:', MAIN_MENU);
+      }
+
+      if (ctx.session.step === 'meter1Value') {
+        if (!isValidMeterValue(text)) {
+          return ctx.reply(
+            '❌ Невірні показники.\nВведіть тільки цифри, без букв і знаків.',
+            MAIN_MENU
+          );
+        }
+        d.meter1Value = text;
+        ctx.session.step = 'hasSecondMeter';
+        return ctx.reply('Чи є у вас другий лічильник?', YES_NO);
+      }
+
+      if (ctx.session.step === 'hasSecondMeter') {
+        if (text === 'Так') {
+          d.hasSecondMeter = 'Так';
+          ctx.session.step = 'meter2Number';
+          return ctx.reply('Вкажіть номер лічильника №2:', MAIN_MENU);
         }
 
-        await appendRow('pokaznyky', [
+        if (text === 'Ні') {
+          d.hasSecondMeter = 'Ні';
+          d.meter2Number = '';
+          d.meter2Value = '';
+          ctx.session.step = 'confirm';
+          return ctx.reply(formatMetersConfirm(d), CONFIRM_KB);
+        }
+
+        return ctx.reply('Будь ласка, оберіть: Так або Ні.', YES_NO);
+      }
+
+      if (ctx.session.step === 'meter2Number') {
+        if (!isValidMeterNumber(text)) {
+          return ctx.reply(
+            '❌ Невірний номер лічильника №2.\nМожна вводити букви, цифри, "/" або "-".',
+            MAIN_MENU
+          );
+        }
+        d.meter2Number = text;
+        ctx.session.step = 'meter2Value';
+        return ctx.reply('Введіть поточні показники лічильника №2:', MAIN_MENU);
+      }
+
+      if (ctx.session.step === 'meter2Value') {
+        if (!isValidMeterValue(text)) {
+          return ctx.reply(
+            '❌ Невірні показники №2.\nВведіть тільки цифри, без букв і знаків.',
+            MAIN_MENU
+          );
+        }
+        d.meter2Value = text;
+        ctx.session.step = 'confirm';
+        return ctx.reply(formatMetersConfirm(d), CONFIRM_KB);
+      }
+
+      if (ctx.session.step === 'confirm') {
+        if (text === 'Змінити') {
+          ctx.session.flow = 'meters';
+          ctx.session.step = 'phone';
+          ctx.session.data = {};
+          return ctx.reply(
+            'Добре, почнемо заново.\nВведіть номер телефону у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
+            MAIN_MENU
+          );
+        }
+
+        if (text === 'Вірно') {
+          if (!canSubmitForm(ctx)) {
+            return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', MAIN_MENU);
+          }
+
+          await appendRow('Показания', [
+            new Date().toLocaleString('uk-UA'),
+            d.phone || '',
+            d.fullName || '',
+            d.account || '',
+            d.address || '',
+            d.meter1Number || '',
+            d.meter1Value || '',
+            d.hasSecondMeter || '',
+            d.meter2Number || '',
+            d.meter2Value || '',
+            String(ctx.from?.id || ''),
+            ctx.from?.username || ''
+          ]);
+
+          return showMainMenu(
+            ctx,
+            'Дякуємо! Показники приборів обліку водопостачання успішно відправлено до КП «ТЖКП».'
+          );
+        }
+
+        return ctx.reply('Будь ласка, оберіть: Вірно або Змінити.', CONFIRM_KB);
+      }
+
+      return;
+    }
+
+    // ===== ФОРМА ЗАЯВКИ =====
+    if (ctx.session.flow === 'request') {
+      const d = ctx.session.data;
+
+      if (ctx.session.step === 'phone') {
+        const phone = normalizePhone(text);
+        if (!phone) {
+          return ctx.reply(
+            '❌ Невірний номер телефону.\nВведіть український номер у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX',
+            MAIN_MENU
+          );
+        }
+        d.phone = phone;
+        ctx.session.step = 'fullName';
+        return ctx.reply('Прізвище, імʼя:', MAIN_MENU);
+      }
+
+      if (ctx.session.step === 'fullName') {
+        if (!isValidFullName(text)) {
+          return ctx.reply(
+            '❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.',
+            MAIN_MENU
+          );
+        }
+        d.fullName = text;
+        ctx.session.step = 'address';
+        return ctx.reply('Адреса (вулиця, будинок, квартира):', MAIN_MENU);
+      }
+
+      if (ctx.session.step === 'address') {
+        if (!isValidAddress(text)) {
+          return ctx.reply(
+            '❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.',
+            MAIN_MENU
+          );
+        }
+        d.address = text;
+        ctx.session.step = 'requestText';
+        return ctx.reply('Опишіть ваше звернення:', MAIN_MENU);
+      }
+
+      if (ctx.session.step === 'requestText') {
+        if (!isValidRequestText(text)) {
+          return ctx.reply(
+            '❌ Звернення введено некоректно.\nОпишіть проблему нормально, від 5 до 500 символів.',
+            MAIN_MENU
+          );
+        }
+
+        d.requestText = text;
+
+        if (!canSubmitForm(ctx)) {
+          return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', MAIN_MENU);
+        }
+
+        await appendRow('Заявки', [
           new Date().toLocaleString('uk-UA'),
           d.phone || '',
           d.fullName || '',
-          d.account || '',
           d.address || '',
-          d.meter1Number || '',
-          d.meter1Value || '',
-          d.hasSecondMeter || '',
-          d.meter2Number || '',
-          d.meter2Value || '',
+          d.requestText || '',
           String(ctx.from?.id || ''),
           ctx.from?.username || ''
         ]);
 
-        return sendMainMenu(
+        return showMainMenu(
           ctx,
-          'Дякуємо! Показники приборів обліку водопостачання успішно відправлено до КП «ТЖКП».'
+          'Дякуємо! Вашу заявку успішно відправлено.'
         );
       }
 
-      return ctx.reply('Будь ласка, оберіть: Вірно або Змінити.', CONFIRM_KB);
+      return;
     }
 
-    return;
-  }
-
-  // =====================
-  // FLOW: REQUEST
-  // =====================
-  if (ctx.session.flow === 'request') {
-    const d = ctx.session.data;
-
-    if (ctx.session.step === 'phone') {
-      const phone = normalizePhone(text);
-      if (!phone) {
-        return ctx.reply(
-          '❌ Невірний номер телефону.\nВведіть український номер у форматі:\n+380XXXXXXXXX або 0XXXXXXXXX'
-        );
-      }
-      d.phone = phone;
-      ctx.session.step = 'fullName';
-      return ctx.reply('Прізвище, імʼя:');
+    // ===== АВТООТВЕТЫ ТОЛЬКО ВНЕ ФОРМ =====
+    if (isElectricityRelated(text)) {
+      return showMainMenu(ctx, ELECTRICITY_TEXT);
     }
 
-    if (ctx.session.step === 'fullName') {
-      if (!isValidFullName(text)) {
-        return ctx.reply(
-          '❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.'
-        );
-      }
-      d.fullName = text;
-      ctx.session.step = 'address';
-      return ctx.reply('Адреса (вулиця, будинок, квартира):');
+    if (isPaymentRelated(text)) {
+      return showMainMenu(ctx, PAYMENT_TEXT);
     }
 
-    if (ctx.session.step === 'address') {
-      if (!isValidAddress(text)) {
-        return ctx.reply(
-          '❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.'
-        );
-      }
-      d.address = text;
-      ctx.session.step = 'requestText';
-      return ctx.reply('Опишіть ваше звернення:');
+    if (isTariffRelated(text)) {
+      return showMainMenu(ctx, TARIFF_TEXT);
     }
 
-    if (ctx.session.step === 'requestText') {
-      if (!isValidRequestText(text)) {
-        return ctx.reply(
-          '❌ Звернення введено некоректно.\nОпишіть проблему нормально, від 5 до 500 символів.'
-        );
-      }
-
-      d.requestText = text;
-
-      if (!canSubmitForm(ctx)) {
-        return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.');
-      }
-
-      await appendRow('zayavky', [
-        new Date().toLocaleString('uk-UA'),
-        d.phone || '',
-        d.fullName || '',
-        d.address || '',
-        d.requestText || '',
-        String(ctx.from?.id || ''),
-        ctx.from?.username || ''
-      ]);
-
-      return sendMainMenu(
-        ctx,
-        'Дякуємо! Вашу заявку успішно відправлено.'
-      );
+    if (isWaterRelated(text)) {
+      return showMainMenu(ctx, WATER_INFO_TEXT);
     }
 
-    return;
+    return showMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню.');
+  } catch (error) {
+    console.error('ERROR:', error);
+    return ctx.reply(
+      '❌ Сталася помилка при обробці або записі в таблицю. Перевірте доступ таблиці та назви листів: "Заявки" і "Показания".',
+      MAIN_MENU
+    );
   }
-
-  // =====================
-  // AUTO-ANSWERS OUTSIDE FORMS
-  // =====================
-  if (isElectricityRelated(text)) {
-    return sendMainMenu(ctx, ELECTRICITY_TEXT);
-  }
-
-  if (isPaymentRelated(text)) {
-    return sendMainMenu(ctx, PAYMENT_TEXT);
-  }
-
-  if (isTariffRelated(text)) {
-    return sendMainMenu(ctx, TARIFF_TEXT);
-  }
-
-  if (isWaterRelated(text)) {
-    return sendMainMenu(ctx, WATER_INFO_TEXT);
-  }
-
-  return sendMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню.');
 });
 
 // =========================
