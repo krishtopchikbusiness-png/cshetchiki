@@ -110,15 +110,15 @@ const ELECTRICITY_TEXT =
   'Комунальне підприємство «Тернівське житлово-комунальне підприємство» не надає послуги постачання електричної енергії.';
 
 const PAYMENT_TEXT =
-  'Онлайн-оплата:\n' +
+  '(1) Онлайн-оплата:\n' +
   'Ви можете здійснити оплату онлайн за посиланням:\n' +
   'https://tgkp.com.ua/pay/#top\n\n' +
-  'Фізична оплата:\n' +
+  '(2) Фізична оплата:\n' +
   'Також оплату можна здійснити особисто за адресою:\n' +
   'м. Тернівка, вул. Григорія Сковороди, 11\n\n' +
-  'Графік роботи:\n' +
+  '(3) Графік роботи:\n' +
   'Понеділок – четвер з 8:00 до 16:30, пʼятниця з 8:00 до 16:00 (без перерви)\n\n' +
-  'Графік роботи абонентського відділу:\n' +
+  '(4) Графік роботи абонентського відділу:\n' +
   'Абонентський відділ: понеділок – четвер з 8:00 до 17:00 (перерва з 12:00 до 13:00)\n\n';
 
 const TARIFF_TEXT =
@@ -180,7 +180,7 @@ function isValidFullName(input) {
 }
 
 function isValidAccount(input) {
-  return /^\d{5,20}$/.test(String(input || '').trim());
+  return String(input || '').trim().length > 0;
 }
 
 function isValidAddress(input) {
@@ -190,7 +190,7 @@ function isValidAddress(input) {
 }
 
 function isValidMeterNumber(input) {
-  return /^[A-Za-zА-Яа-яІіЇїЄєҐґЁё0-9/-]{3,30}$/.test(String(input || '').trim());
+  return String(input || '').trim().length > 0;
 }
 
 function isValidMeterValue(input) {
@@ -198,19 +198,12 @@ function isValidMeterValue(input) {
 }
 
 function isValidRequestText(input) {
-  const v = String(input || '').trim();
-  if (v.length < 5 || v.length > 500) return false;
-  if (/^(.)\1{4,}$/.test(v)) return false;
-  return true;
+  return String(input || '').trim().length > 0;
 }
 
 function isGarbageText(input) {
   const v = String(input || '').trim();
-  if (!v) return true;
-  if (v.length > MAX_TEXT_LEN) return true;
-  if (/^(.)\1{5,}$/.test(v)) return true;
-  if (/^[!@#$%^&*()_+=\-[\]{};':"\\|,.<>/?`~]+$/.test(v)) return true;
-  return false;
+  return !v;
 }
 
 function canProcessMessage(ctx) {
@@ -241,6 +234,16 @@ function formatMetersConfirm(d) {
     `Другий лічильник: ${d.hasSecondMeter || '-'}\n` +
     `Лічильник №2: ${d.meter2Number || '-'}\n` +
     `Показники №2: ${d.meter2Value || '-'}`
+  );
+}
+
+function formatRequestConfirm(d) {
+  return (
+    'Перевірте введені дані:\n\n' +
+    `Телефон: ${d.phone || '-'}\n` +
+    `Прізвище, імʼя: ${d.fullName || '-'}\n` +
+    `Адреса: ${d.address || '-'}\n` +
+    `Звернення: ${d.requestText || '-'}`
   );
 }
 
@@ -525,7 +528,7 @@ bot.on('text', async (ctx) => {
           }
 
           return ctx.reply(
-            '❌ Невірний особистий рахунок.\nДозволені тільки цифри, від 5 до 20 символів.',
+            '❌ Введіть особистий рахунок.',
             STEP_MENU_KB
           );
         }
@@ -585,7 +588,7 @@ bot.on('text', async (ctx) => {
           }
 
           return ctx.reply(
-            '❌ Невірний номер лічильника.\nМожна вводити букви, цифри, "/" або "-".',
+            '❌ Введіть номер лічильника.',
             STEP_MENU_KB
           );
         }
@@ -680,7 +683,7 @@ bot.on('text', async (ctx) => {
           }
 
           return ctx.reply(
-            '❌ Невірний номер лічильника №2.\nМожна вводити букви, цифри, "/" або "-".',
+            '❌ Введіть номер лічильника №2.',
             STEP_MENU_KB
           );
         }
@@ -854,29 +857,47 @@ bot.on('text', async (ctx) => {
           }
 
           return ctx.reply(
-            '❌ Звернення введено некоректно.\nОпишіть проблему нормально, від 5 до 500 символів.',
+            '❌ Опишіть ваше звернення.',
             STEP_MENU_KB
           );
         }
 
         d.requestText = text;
+        ctx.session.step = 'confirmRequest';
+        return ctx.reply(formatRequestConfirm(d), CONFIRM_KB);
+      }
 
-        if (!canSubmitForm(ctx)) {
-          return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', STEP_MENU_KB);
+      if (ctx.session.step === 'confirmRequest') {
+        if (text === 'Змінити') {
+          ctx.session.flow = 'request';
+          ctx.session.step = 'phone';
+          ctx.session.data = {};
+          return ctx.reply(
+            'Будь ласка, натисніть кнопку нижче, щоб поділитися номером телефону:',
+            CONTACT_KB
+          );
         }
 
-        const { date, time } = getDateTimeParts();
+        if (text === 'Вірно') {
+          if (!canSubmitForm(ctx)) {
+            return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', CONFIRM_KB);
+          }
 
-        await appendRow('Заявки', [
-          date,
-          time,
-          d.phone || '',
-          d.fullName || '',
-          d.address || '',
-          d.requestText || ''
-        ]);
+          const { date, time } = getDateTimeParts();
 
-        return showMainMenu(ctx, SUCCESS_REQUEST_TEXT);
+          await appendRow('Заявки', [
+            date,
+            time,
+            d.phone || '',
+            d.fullName || '',
+            d.address || '',
+            d.requestText || ''
+          ]);
+
+          return showMainMenu(ctx, SUCCESS_REQUEST_TEXT);
+        }
+
+        return ctx.reply('Будь ласка, оберіть: Вірно або Змінити.', CONFIRM_KB);
       }
 
       return;
@@ -921,3 +942,4 @@ bot.on('text', async (ctx) => {
 // =========================
 bot.launch();
 console.log('Бот запущен');
+
