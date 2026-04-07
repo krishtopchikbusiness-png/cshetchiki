@@ -418,7 +418,7 @@ bot.on('contact', async (ctx) => {
   ensureSession(ctx);
 
   if (!ctx.session.flow || ctx.session.step !== 'phone') {
-    return ctx.reply('Оберіть, будь ласка, потрібний пункт меню.', MAIN_MENU);
+    return ctx.reply('Оберіть, будь ласка, потрібний пункт меню або задайте ваше запитання.', MAIN_MENU);
   }
 
   let phone = String(ctx.message.contact.phone_number || '').trim();
@@ -922,7 +922,7 @@ bot.on('text', async (ctx) => {
       return showMainMenu(ctx, WATER_INFO_TEXT);
     }
 
-    return showMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню.');
+    return showMainMenu(ctx, 'Оберіть, будь ласка, потрібний пункт меню або задайте ваше запитання.');
   } catch (error) {
     console.error('FULL ERROR:', error?.response?.data || error?.message || error);
 
