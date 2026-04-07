@@ -343,6 +343,7 @@ function isPaymentRelated(text) {
 function isTariffRelated(text) {
   return includesAny(text, [
     'тариф',
+    'цена за воду',
     'тарифи',
     'вартість послуг',
     'ціни на воду',
