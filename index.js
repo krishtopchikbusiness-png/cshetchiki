@@ -65,8 +65,7 @@ function getDateTimeParts() {
 // =========================
 const MAIN_MENU = Markup.keyboard([
   ['📊 Передати показники', '🧾 Залишити заявку'],
-  [Markup.button.url('📢 Канал ТЖКП', CHANNEL_URL)],
-  ['📞 Контакт центр']
+  ['📢 Канал ТЖКП', '📞 Контакт центр']
 ]).resize().persistent();
 
 const CONTACT_KB = Markup.keyboard([
@@ -74,8 +73,19 @@ const CONTACT_KB = Markup.keyboard([
   ['⬅️ В меню']
 ]).resize().persistent();
 
-const YES_NO = Markup.keyboard([['Так', 'Ні']]).resize().persistent();
-const CONFIRM_KB = Markup.keyboard([['Вірно', 'Змінити']]).resize().persistent();
+const STEP_MENU_KB = Markup.keyboard([
+  ['⬅️ В меню']
+]).resize().persistent();
+
+const YES_NO = Markup.keyboard([
+  ['Так', 'Ні'],
+  ['⬅️ В меню']
+]).resize().persistent();
+
+const CONFIRM_KB = Markup.keyboard([
+  ['Вірно', 'Змінити'],
+  ['⬅️ В меню']
+]).resize().persistent();
 
 // =========================
 // TEXTS FROM TZ
@@ -361,6 +371,13 @@ bot.hears('⬅️ В меню', async (ctx) => {
   return showMainMenu(ctx);
 });
 
+bot.hears('📢 Канал ТЖКП', async (ctx) => {
+  return ctx.reply(
+    'Офіційний Telegram-канал КП «ТЖКП»:\n\nhttps://t.me/kptgkp',
+    MAIN_MENU
+  );
+});
+
 bot.hears('📞 Контакт центр', async (ctx) => {
   return ctx.reply(`Контакт центр: ${CONTACT_CENTER_PHONE}`, MAIN_MENU);
 });
@@ -416,7 +433,7 @@ bot.on('contact', async (ctx) => {
   ctx.session.data.phone = phone;
   ctx.session.step = 'fullName';
 
-  return ctx.reply('Прізвище, імʼя:', MAIN_MENU);
+  return ctx.reply('Прізвище, імʼя:', STEP_MENU_KB);
 });
 
 // =========================
@@ -437,13 +454,14 @@ bot.on('text', async (ctx) => {
     if (
       text === '📊 Передати показники' ||
       text === '🧾 Залишити заявку' ||
+      text === '📢 Канал ТЖКП' ||
       text === '📞 Контакт центр'
     ) {
       return;
     }
 
     if (isGarbageText(text)) {
-      return ctx.reply('❌ Некоректне повідомлення. Введіть нормальні дані.', MAIN_MENU);
+      return ctx.reply('❌ Некоректне повідомлення. Введіть нормальні дані.', STEP_MENU_KB);
     }
 
     // =====================
@@ -462,145 +480,145 @@ bot.on('text', async (ctx) => {
       if (ctx.session.step === 'fullName') {
         if (!isValidFullName(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.fullName = text;
         ctx.session.step = 'account';
-        return ctx.reply('Особистий рахунок:', MAIN_MENU);
+        return ctx.reply('Особистий рахунок:', STEP_MENU_KB);
       }
 
       if (ctx.session.step === 'account') {
         if (!isValidAccount(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть особистий рахунок:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть особистий рахунок:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть особистий рахунок:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть особистий рахунок:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть особистий рахунок:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть особистий рахунок:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть особистий рахунок:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть особистий рахунок:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірний особистий рахунок.\nДозволені тільки цифри, від 5 до 20 символів.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.account = text;
         ctx.session.step = 'address';
-        return ctx.reply('Адреса (вулиця, будинок, квартира):', MAIN_MENU);
+        return ctx.reply('Адреса (вулиця, будинок, квартира):', STEP_MENU_KB);
       }
 
       if (ctx.session.step === 'address') {
         if (!isValidAddress(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.address = text;
         ctx.session.step = 'meter1Number';
-        return ctx.reply('Вкажіть номер лічильника №1:', MAIN_MENU);
+        return ctx.reply('Вкажіть номер лічильника №1:', STEP_MENU_KB);
       }
 
       if (ctx.session.step === 'meter1Number') {
         if (!isValidMeterNumber(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №1:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірний номер лічильника.\nМожна вводити букви, цифри, "/" або "-".',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.meter1Number = text;
         ctx.session.step = 'meter1Value';
-        return ctx.reply('Введіть поточні показники лічильника №1:', MAIN_MENU);
+        return ctx.reply('Введіть поточні показники лічильника №1:', STEP_MENU_KB);
       }
 
       if (ctx.session.step === 'meter1Value') {
         if (!isValidMeterValue(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №1:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірні показники.\nВведіть тільки цифри, без букв і знаків.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
@@ -613,7 +631,7 @@ bot.on('text', async (ctx) => {
         if (text === 'Так') {
           d.hasSecondMeter = 'Так';
           ctx.session.step = 'meter2Number';
-          return ctx.reply('Вкажіть номер лічильника №2:', MAIN_MENU);
+          return ctx.reply('Вкажіть номер лічильника №2:', STEP_MENU_KB);
         }
 
         if (text === 'Ні') {
@@ -625,19 +643,19 @@ bot.on('text', async (ctx) => {
         }
 
         if (isWaterRelated(text)) {
-          await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
+          await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
           return ctx.reply('Будь ласка, оберіть: Так або Ні.', YES_NO);
         }
         if (isElectricityRelated(text)) {
-          await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
+          await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
           return ctx.reply('Будь ласка, оберіть: Так або Ні.', YES_NO);
         }
         if (isPaymentRelated(text)) {
-          await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
+          await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
           return ctx.reply('Будь ласка, оберіть: Так або Ні.', YES_NO);
         }
         if (isTariffRelated(text)) {
-          await ctx.reply(TARIFF_TEXT, MAIN_MENU);
+          await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
           return ctx.reply('Будь ласка, оберіть: Так або Ні.', YES_NO);
         }
 
@@ -647,55 +665,55 @@ bot.on('text', async (ctx) => {
       if (ctx.session.step === 'meter2Number') {
         if (!isValidMeterNumber(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, вкажіть номер лічильника №2:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірний номер лічильника №2.\nМожна вводити букви, цифри, "/" або "-".',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.meter2Number = text;
         ctx.session.step = 'meter2Value';
-        return ctx.reply('Введіть поточні показники лічильника №2:', MAIN_MENU);
+        return ctx.reply('Введіть поточні показники лічильника №2:', STEP_MENU_KB);
       }
 
       if (ctx.session.step === 'meter2Value') {
         if (!isValidMeterValue(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть поточні показники лічильника №2:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірні показники №2.\nВведіть тільки цифри, без букв і знаків.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
@@ -717,7 +735,7 @@ bot.on('text', async (ctx) => {
 
         if (text === 'Вірно') {
           if (!canSubmitForm(ctx)) {
-            return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', MAIN_MENU);
+            return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', CONFIRM_KB);
           }
 
           const { date, time } = getDateTimeParts();
@@ -761,92 +779,92 @@ bot.on('text', async (ctx) => {
       if (ctx.session.step === 'fullName') {
         if (!isValidFullName(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть прізвище, імʼя:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірно введено ПІБ.\nВведіть тільки імʼя та прізвище, без цифр і сторонніх символів.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.fullName = text;
         ctx.session.step = 'address';
-        return ctx.reply('Адреса (вулиця, будинок, квартира):', MAIN_MENU);
+        return ctx.reply('Адреса (вулиця, будинок, квартира):', STEP_MENU_KB);
       }
 
       if (ctx.session.step === 'address') {
         if (!isValidAddress(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, введіть адресу (вулиця, будинок, квартира):', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Невірна адреса.\nВведіть повну адресу: вулиця, будинок, квартира.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.address = text;
         ctx.session.step = 'requestText';
-        return ctx.reply('Опишіть ваше звернення:', MAIN_MENU);
+        return ctx.reply('Опишіть ваше звернення:', STEP_MENU_KB);
       }
 
       if (ctx.session.step === 'requestText') {
         if (!isValidRequestText(text)) {
           if (isWaterRelated(text)) {
-            await ctx.reply(WATER_INFO_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, опишіть ваше звернення:', MAIN_MENU);
+            await ctx.reply(WATER_INFO_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, опишіть ваше звернення:', STEP_MENU_KB);
           }
           if (isElectricityRelated(text)) {
-            await ctx.reply(ELECTRICITY_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, опишіть ваше звернення:', MAIN_MENU);
+            await ctx.reply(ELECTRICITY_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, опишіть ваше звернення:', STEP_MENU_KB);
           }
           if (isPaymentRelated(text)) {
-            await ctx.reply(PAYMENT_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, опишіть ваше звернення:', MAIN_MENU);
+            await ctx.reply(PAYMENT_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, опишіть ваше звернення:', STEP_MENU_KB);
           }
           if (isTariffRelated(text)) {
-            await ctx.reply(TARIFF_TEXT, MAIN_MENU);
-            return ctx.reply('Будь ласка, опишіть ваше звернення:', MAIN_MENU);
+            await ctx.reply(TARIFF_TEXT, STEP_MENU_KB);
+            return ctx.reply('Будь ласка, опишіть ваше звернення:', STEP_MENU_KB);
           }
 
           return ctx.reply(
             '❌ Звернення введено некоректно.\nОпишіть проблему нормально, від 5 до 500 символів.',
-            MAIN_MENU
+            STEP_MENU_KB
           );
         }
 
         d.requestText = text;
 
         if (!canSubmitForm(ctx)) {
-          return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', MAIN_MENU);
+          return ctx.reply('⏳ Зачекайте трохи перед повторною відправкою.', STEP_MENU_KB);
         }
 
         const { date, time } = getDateTimeParts();
