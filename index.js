@@ -318,6 +318,7 @@ function isElectricityRelated(text) {
 function isPaymentRelated(text) {
   return includesAny(text, [
     'оплатити',
+    'платить',
     'оплата',
     'заплатити',
     'платіж',
