@@ -5,7 +5,6 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 bot.use(session());
 
 // =========================
-
 // CONFIG
 // =========================
 const CHANNEL_URL = 'https://t.me/kptgkp';
@@ -42,14 +41,23 @@ async function appendRow(sheetName, values) {
 // =========================
 function getDateTimeParts() {
   const now = new Date();
-  return {
-    date: now.toLocaleDateString('uk-UA'),
-    time: now.toLocaleTimeString('uk-UA', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
-  };
+
+  const date = new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now);
+
+  const time = new Intl.DateTimeFormat('uk-UA', {
+    timeZone: 'Europe/Kyiv',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(now);
+
+  return { date, time };
 }
 
 // =========================
@@ -57,11 +65,13 @@ function getDateTimeParts() {
 // =========================
 const MAIN_MENU = Markup.keyboard([
   ['📊 Передати показники', '🧾 Залишити заявку'],
-  ['📢 Канал ТЖКП', '📞 Контакт центр']
+  [Markup.button.url('📢 Канал ТЖКП', CHANNEL_URL)],
+  ['📞 Контакт центр']
 ]).resize().persistent();
 
 const CONTACT_KB = Markup.keyboard([
-  [Markup.button.contactRequest('📱 Поділитися номером телефону')]
+  [Markup.button.contactRequest('📱 Поділитися номером телефону')],
+  ['⬅️ В меню']
 ]).resize().persistent();
 
 const YES_NO = Markup.keyboard([['Так', 'Ні']]).resize().persistent();
@@ -347,14 +357,8 @@ bot.start(async (ctx) => {
   await showMainMenu(ctx);
 });
 
-bot.hears('📢 Канал ТЖКП', async (ctx) => {
-  await ctx.reply(
-    'Перейдіть до офіційного Telegram-каналу КП «ТЖКП»:',
-    Markup.inlineKeyboard([
-      [Markup.button.url('📢 Відкрити канал', CHANNEL_URL)]
-    ])
-  );
-  return ctx.reply('Оберіть, будь ласка, потрібний пункт меню.', MAIN_MENU);
+bot.hears('⬅️ В меню', async (ctx) => {
+  return showMainMenu(ctx);
 });
 
 bot.hears('📞 Контакт центр', async (ctx) => {
@@ -426,10 +430,13 @@ bot.on('text', async (ctx) => {
 
     const text = (ctx.message.text || '').trim();
 
+    if (text === '⬅️ В меню') {
+      return showMainMenu(ctx);
+    }
+
     if (
       text === '📊 Передати показники' ||
       text === '🧾 Залишити заявку' ||
-      text === '📢 Канал ТЖКП' ||
       text === '📞 Контакт центр'
     ) {
       return;
@@ -445,7 +452,6 @@ bot.on('text', async (ctx) => {
     if (ctx.session.flow === 'meters') {
       const d = ctx.session.data;
 
-      // На шаге телефона только кнопка контакта
       if (ctx.session.step === 'phone') {
         return ctx.reply(
           'Будь ласка, натисніть кнопку нижче, щоб поділитися номером телефону:',
@@ -745,7 +751,6 @@ bot.on('text', async (ctx) => {
     if (ctx.session.flow === 'request') {
       const d = ctx.session.data;
 
-      // На шаге телефона только кнопка контакта
       if (ctx.session.step === 'phone') {
         return ctx.reply(
           'Будь ласка, натисніть кнопку нижче, щоб поділитися номером телефону:',
@@ -900,6 +905,3 @@ bot.on('text', async (ctx) => {
 // =========================
 bot.launch();
 console.log('Бот запущен');
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
